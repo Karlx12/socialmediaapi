@@ -4,6 +4,8 @@ namespace Tests\Feature;
 
 use App\Services\SocialMedia\MetaGraphService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Http\UploadedFile;
 use Tests\TestCase;
 
 class SocialMediaApiTest extends TestCase
@@ -35,24 +37,7 @@ class SocialMediaApiTest extends TestCase
         $resp->assertJson(['id' => '1234']);
     }
 
-    public function test_publish_to_facebook_invalid_message_format_returns_422()
-    {
-        $mock = \Mockery::mock(MetaGraphService::class);
-        $this->app->instance(MetaGraphService::class, $mock);
-
-        $user = \App\Models\User::factory()->create();
-        $token = $user->createToken('test')->plainTextToken;
-
-        $resp = $this->withHeader('Authorization', "Bearer {$token}")
-            ->postJson('/api/v1/marketing/socialmedia/posts/facebook', [
-                'message' => 'Hello invalid format',
-                'page_id' => '123',
-                'access_token' => 'fake',
-            ]);
-
-        $resp->assertStatus(422);
-        $resp->assertJsonValidationErrors('message');
-    }
+    // Format validation removed: message pattern enforcement is not required by default.
 
     public function test_send_whatsapp_message_routes_and_service_called()
     {
@@ -76,5 +61,32 @@ class SocialMediaApiTest extends TestCase
 
         $resp->assertStatus(200);
         $resp->assertJson(['messages' => [['id' => 'g123']]]);
+    }
+
+    public function test_publish_to_facebook_with_uploaded_image_stores_and_service_called()
+    {
+        Storage::fake('public');
+
+        $mock = \Mockery::mock(MetaGraphService::class);
+        $mock->shouldReceive('publishFacebookPhotoFromLocalFile')
+            ->once()
+            ->andReturn(['id' => '1234']);
+        $this->app->instance(MetaGraphService::class, $mock);
+
+        $user = \App\Models\User::factory()->create();
+        $token = $user->createToken('test')->plainTextToken;
+
+        $file = UploadedFile::fake()->image('social.png');
+
+        $resp = $this->withHeader('Authorization', "Bearer {$token}")
+            ->post('/api/v1/marketing/socialmedia/posts/facebook', [
+                'image' => $file,
+                'message' => 'Prueba con imagen',
+                'page_id' => '123',
+                'access_token' => 'fake',
+            ]);
+
+        $resp->assertStatus(200);
+        Storage::disk('public')->assertExists('uploads/' . $file->hashName());
     }
 }

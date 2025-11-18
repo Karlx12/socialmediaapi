@@ -26,9 +26,9 @@ class MetaGraphServiceTest extends TestCase
         });
     }
 
-    public function test_publish_instagram_uses_page_access_token_when_not_passed()
+    public function test_publish_instagram_uses_ig_access_token_when_not_passed()
     {
-        config(['services.meta.page_access_token' => 'PAGE_TOKEN']);
+        config(['services.meta.ig_access_token' => 'IG_TOKEN']);
 
         // fake both requests for instagram create and publish
         $apiVersion = config('services.meta.api_version') ?: 'v24.0';
@@ -38,14 +38,14 @@ class MetaGraphServiceTest extends TestCase
         ]);
 
         $service = new MetaGraphService;
-        $service->publishInstagramImage('24620739954263006', 'https://example.com/photo.jpg', 'Caption');
+    $service->publishInstagramImage('24620739954263006', 'https://example.com/photo.jpg', 'Caption');
 
         Http::assertSent(function ($request) use ($apiVersion) {
             // request body is JSON; decode and check access_token
             $data = json_decode($request->body(), true);
 
             return str_contains($request->url(), "/{$apiVersion}/")
-                && data_get($data, 'access_token') === 'PAGE_TOKEN';
+                && data_get($data, 'access_token') === 'IG_TOKEN';
         });
     }
 }

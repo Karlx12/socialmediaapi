@@ -79,6 +79,60 @@ class MetaGraphService
         return $resp->json();
     }
 
+    /**
+     * Publish a photo by uploading local file content to the Facebook Page /photos endpoint.
+     */
+    public function publishFacebookPhotoFromLocalFile(string $pageId, string $localFilePath, string $caption = '', ?string $accessToken = null, bool $published = true): array
+    {
+        $accessToken ??= config('services.meta.page_access_token') ?: env('META_PAGE_ACCESS_TOKEN');
+        if (! $accessToken) {
+            return ['error' => 'page_access_token_missing', 'message' => 'Page access token is required'];
+        }
+
+        if (! file_exists($localFilePath)) {
+            return ['error' => 'file_not_found', 'message' => 'Local photo file not found'];
+        }
+
+        $url = "{$this->graphUrl}/{$this->apiVersion}/{$pageId}/photos";
+        $resp = Http::attach('source', file_get_contents($localFilePath), basename($localFilePath))
+            ->asMultipart()
+            ->post($url, [
+                'caption' => $caption,
+                'access_token' => $accessToken,
+                'published' => $published ? 'true' : 'false',
+            ]);
+
+        return $resp->json();
+    }
+
+    /**
+     * Publish a video to a Facebook page using the /videos endpoint. Accepts a local file path.
+     */
+    public function publishFacebookVideo(string $pageId, string $localFilePath, string $description = '', ?string $accessToken = null, bool $published = true): array
+    {
+        $accessToken ??= config('services.meta.page_access_token') ?: env('META_PAGE_ACCESS_TOKEN');
+        if (! $accessToken) {
+            return ['error' => 'page_access_token_missing', 'message' => 'Page access token is required'];
+        }
+
+        if (! file_exists($localFilePath)) {
+            return ['error' => 'file_not_found', 'message' => 'Local video file not found'];
+        }
+
+        $url = "{$this->graphUrl}/{$this->apiVersion}/{$pageId}/videos";
+
+        // Use multipart attaching the video file as 'source'
+        $resp = Http::attach('source', file_get_contents($localFilePath), basename($localFilePath))
+            ->asMultipart()
+            ->post($url, [
+                'description' => $description,
+                'access_token' => $accessToken,
+                'published' => $published ? 'true' : 'false',
+            ]);
+
+        return $resp->json();
+    }
+
     public function publishInstagramImage(
         string $igUserId,
         string $imageUrl,
@@ -90,10 +144,18 @@ class MetaGraphService
         ?string $altText = null,
         array $children = []
     ): array {
-        // IG uses the page access token by default (same as Facebook/WhatsApp)
-        $accessToken ??= config('services.meta.page_access_token') ?: env('META_PAGE_ACCESS_TOKEN');
+        // Must use a dedicated Instagram access token only
+        if (! $accessToken) {
+            $accessToken = config('services.meta.ig_access_token') ?: env('META_IG_ACCESS_TOKEN');
+        }
         if (! $accessToken) {
             return ['error' => 'ig_access_token_missing', 'message' => 'Instagram access token is required'];
+        }
+
+        // Use requested IG user id or fallback to configured IG user id from env
+        $igUserId = $igUserId ?: (config('services.meta.ig_user_id') ?: env('META_IG_USER_ID'));
+        if (! $igUserId) {
+            return ['error' => 'ig_user_id_missing', 'message' => 'Instagram user id is required'];
         }
 
         // Create media container
@@ -101,27 +163,21 @@ class MetaGraphService
             'caption' => $caption,
             'access_token' => $accessToken,
         ];
-
         if ($mediaType === 'IMAGE' || $mediaType === 'STORIES') {
             $payload['image_url'] = $imageUrl;
         } else {
             $payload['video_url'] = $imageUrl;
         }
-
         $payload['media_type'] = $mediaType;
-
         if ($coverUrl) {
             $payload['cover_url'] = $coverUrl;
         }
-
         if ($shareToFeed) {
             $payload['share_to_feed'] = true;
         }
-
         if ($altText) {
             $payload['alt_text'] = $altText;
         }
-
         if (! empty($children)) {
             $payload['children'] = json_encode($children);
         }
@@ -131,13 +187,11 @@ class MetaGraphService
         if (empty($createData['id'])) {
             return ['error' => 'media_creation_failed', 'details' => $createData];
         }
-
-        // Publish container
+        // Publish the IG media container
         $publishPayload = [
             'creation_id' => $createData['id'],
             'access_token' => $accessToken,
         ];
-
         $publishResp = Http::post("{$this->graphUrl}/{$this->apiVersion}/{$igUserId}/media_publish", $publishPayload);
 
         return $publishResp->json();
