@@ -63,6 +63,33 @@ class SocialMediaApiTest extends TestCase
         $resp->assertJson(['messages' => [['id' => 'g123']]]);
     }
 
+    public function test_send_whatsapp_template_routes_and_service_called()
+    {
+        $mock = \Mockery::mock(MetaGraphService::class);
+        $mock->shouldReceive('sendWhatsappMessage')
+            ->once()
+            ->andReturn(['messages' => [['id' => 'g123', 'message_status' => 'accepted']]]);
+        $this->app->instance(MetaGraphService::class, $mock);
+
+        $user = \App\Models\User::factory()->create();
+        $token = $user->createToken('test')->plainTextToken;
+
+        $resp = $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson('/api/v1/marketing/socialmedia/chats/send', [
+                'platform' => 'whatsapp',
+                'to' => '51999999999',
+                'template' => [
+                    'name' => 'hello_world',
+                    'language' => ['code' => 'en_US']
+                ],
+                'phone_number_id' => '111',
+                'access_token' => 'fake',
+            ]);
+
+        $resp->assertStatus(200);
+        $resp->assertJson(['messages' => [['id' => 'g123', 'message_status' => 'accepted']]]);
+    }
+
     public function test_publish_to_facebook_with_uploaded_image_stores_and_service_called()
     {
         Storage::fake('public');

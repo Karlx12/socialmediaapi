@@ -15,12 +15,17 @@ class SocialChatController extends Controller
     {
         $payload = $request->validated();
         $platform = $payload['platform'];
-        $to = $payload['to'];
-        $message = $payload['message'];
+    $to = $payload['to'];
+    $message = $payload['message'] ?? null;
 
         if ($platform === 'whatsapp') {
-            $phoneNumberId = $payload['phone_number_id'] ?? config('services.meta.whatsapp_phone_number_id') ?: env('META_WHATSAPP_NUMBER_ID');
-            $resp = $this->metaService->sendWhatsappMessage($phoneNumberId, $to, $message, $payload['access_token'] ?? null);
+            $phoneNumberId = $payload['phone_number_id'] ?? (config('services.meta.whatsapp_phone_number_id') ?: env('META_WHATSAPP_NUMBER_ID'));
+            // Support template messages or plain text
+            if (! empty($payload['template'])) {
+                $resp = $this->metaService->sendWhatsappMessage($phoneNumberId, $to, ['template' => $payload['template']], $payload['access_token'] ?? null);
+            } else {
+                $resp = $this->metaService->sendWhatsappMessage($phoneNumberId, $to, $message, $payload['access_token'] ?? null);
+            }
         } elseif ($platform === 'messenger') {
             $pageAccessToken = $payload['access_token'] ?? config('services.meta.page_access_token') ?: env('META_PAGE_ACCESS_TOKEN');
             $resp = $this->metaService->sendMessengerMessage($pageAccessToken, $to, $message);

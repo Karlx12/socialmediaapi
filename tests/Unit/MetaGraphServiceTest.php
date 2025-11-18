@@ -48,4 +48,29 @@ class MetaGraphServiceTest extends TestCase
                 && data_get($data, 'access_token') === 'IG_TOKEN';
         });
     }
+
+    public function test_send_whatsapp_template_sends_template_payload()
+    {
+        config(['services.meta.page_access_token' => 'PAGE_TOKEN']);
+
+        $apiVersion = config('services.meta.api_version') ?: 'v24.0';
+        Http::fake([
+            "https://graph.facebook.com/{$apiVersion}/*/messages" => Http::response(['messages' => [['id' => 'MSG_ID']]], 200),
+        ]);
+
+        $service = new MetaGraphService;
+        $service->sendWhatsappMessage('296251190242664', '51940539539', [
+            'template' => [
+                'name' => 'hello_world',
+                'language' => ['code' => 'en_US'],
+            ],
+        ]);
+
+        Http::assertSent(function ($request) use ($apiVersion) {
+            $payload = json_decode($request->body(), true);
+            return str_contains($request->url(), "/{$apiVersion}/")
+                && data_get($payload, 'type') === 'template'
+                && data_get($payload, 'template.name') === 'hello_world';
+        });
+    }
 }

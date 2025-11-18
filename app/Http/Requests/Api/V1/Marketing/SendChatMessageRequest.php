@@ -16,7 +16,8 @@ class SendChatMessageRequest extends FormRequest
         return [
             'platform' => 'required|in:whatsapp,messenger,instagram',
             'to' => 'required|string',
-            'message' => 'required|string',
+            'message' => 'required_without:template|string',
+            'template' => 'required_without:message|array',
             'phone_number_id' => 'nullable|string',
             'recipient_id' => 'nullable|string',
             'access_token' => 'nullable|string',

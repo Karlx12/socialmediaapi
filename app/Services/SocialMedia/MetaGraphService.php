@@ -197,21 +197,47 @@ class MetaGraphService
         return $publishResp->json();
     }
 
-    public function sendWhatsappMessage(string $phoneNumberId, string $to, string $message, ?string $accessToken = null): array
+    /**
+     * Send a WhatsApp message via the Graph API.
+     * $messageOrPayload can be a string (text body) or an array (template payload).
+     */
+    public function sendWhatsappMessage(string $phoneNumberId, string $to, $messageOrPayload, ?string $accessToken = null): array
     {
         // WhatsApp uses the page access token by default
         $accessToken ??= config('services.meta.page_access_token') ?: env('META_PAGE_ACCESS_TOKEN');
         if (! $accessToken) {
             return ['error' => 'whatsapp_token_missing', 'message' => 'Whatsapp token is required'];
         }
-
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$phoneNumberId}/messages";
-        $payload = [
-            'messaging_product' => 'whatsapp',
-            'to' => $to,
-            'type' => 'text',
-            'text' => ['body' => $message],
-        ];
+        if (is_string($messageOrPayload)) {
+            // Text message
+            $payload = [
+                'messaging_product' => 'whatsapp',
+                'to' => $to,
+                'type' => 'text',
+                'text' => ['body' => $messageOrPayload],
+            ];
+        } elseif (is_array($messageOrPayload) && isset($messageOrPayload['template'])) {
+            // Template message
+            $payload = [
+                'messaging_product' => 'whatsapp',
+                'to' => $to,
+                'type' => 'template',
+                'template' => $messageOrPayload['template'],
+            ];
+        } else {
+            // If payload is array with message key
+            if (is_array($messageOrPayload) && isset($messageOrPayload['message'])) {
+                $payload = [
+                    'messaging_product' => 'whatsapp',
+                    'to' => $to,
+                    'type' => 'text',
+                    'text' => ['body' => $messageOrPayload['message']],
+                ];
+            } else {
+                return ['error' => 'invalid_whatsapp_payload', 'message' => 'Invalid payload for WhatsApp message.'];
+            }
+        }
 
         $resp = Http::withToken($accessToken)->post($url, $payload);
 
