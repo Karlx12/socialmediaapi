@@ -8,6 +8,7 @@ use App\Http\Requests\Api\V1\Marketing\PublishInstagramRequest;
 use App\Services\SocialMedia\MetaGraphService;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\JsonResponse;
+use IncadevUns\CoreDomain\Models\Post;
 
 class SocialMediaController extends Controller
 {
@@ -52,7 +53,49 @@ class SocialMediaController extends Controller
             );
         }
 
-        return response()->json($resp);
+        // Check if the API call was successful
+        if (isset($resp['error'])) {
+            return response()->json(['error' => 'Meta API error', 'details' => $resp], 400);
+        }
+
+        if (!isset($resp['id'])) {
+            return response()->json(['error' => 'Invalid response from Meta API', 'response' => $resp], 400);
+        }
+
+        // Guardar el post en la base de datos
+        $contentType = 'text';
+        if ($request->hasFile('image')) {
+            $contentType = 'image';
+        } elseif ($request->hasFile('video')) {
+            $contentType = 'video';
+        }
+
+        try {
+            $post = Post::create([
+                'campaign_id' => $payload['campaign_id'] ?? null,
+                'meta_post_id' => $resp['id'],
+                'title' => substr($payload['message'] ?? 'Facebook Post', 0, 255),
+                'platform' => 'facebook',
+                'content' => $payload['message'] ?? null,
+                'content_type' => $contentType,
+                'image_path' => $request->hasFile('image') ? $path : null,
+                'link_url' => $payload['link'] ?? null,
+                'status' => 'published',
+                'published_at' => now(),
+                'created_by' => auth()->id(),
+            ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            if ($e->getCode() == 23000 && str_contains($e->getMessage(), 'posts_campaign_id_foreign')) {
+                return response()->json(['error' => 'Campaign not found', 'code' => 'CAMPAIGN_NOT_FOUND'], 400);
+            }
+            throw $e;
+        }
+
+        return response()->json([
+            'meta_post_id' => $resp['id'],
+            'post_id' => $post->id,
+            'data' => $resp,
+        ]);
     }
 
     public function publishToInstagram(PublishInstagramRequest $request): JsonResponse
@@ -78,6 +121,37 @@ class SocialMediaController extends Controller
             );
         }
 
-        return response()->json($resp);
+        // Guardar el post en la base de datos
+        $contentType = 'image'; // Instagram posts are typically images or videos, but this method handles images
+        $imagePath = null;
+        if ($request->hasFile('image')) {
+            $imagePath = $path;
+        }
+
+        try {
+            $post = Post::create([
+                'campaign_id' => $payload['campaign_id'] ?? null,
+                'meta_post_id' => $resp['id'],
+                'title' => substr($payload['caption'] ?? 'Instagram Post', 0, 255),
+                'platform' => 'instagram',
+                'content' => $payload['caption'] ?? null,
+                'content_type' => $contentType,
+                'image_path' => $imagePath,
+                'status' => 'published',
+                'published_at' => now(),
+                'created_by' => auth()->id(),
+            ]);
+        } catch (\Illuminate\Database\QueryException $e) {
+            if ($e->getCode() == 23000 && str_contains($e->getMessage(), 'posts_campaign_id_foreign')) {
+                return response()->json(['error' => 'Campaign not found', 'code' => 'CAMPAIGN_NOT_FOUND'], 400);
+            }
+            throw $e;
+        }
+
+        return response()->json([
+            'meta_post_id' => $resp['id'],
+            'post_id' => $post->id,
+            'data' => $resp,
+        ]);
     }
 }

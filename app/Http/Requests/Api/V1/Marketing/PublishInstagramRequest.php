@@ -19,6 +19,7 @@ class PublishInstagramRequest extends FormRequest
             'caption' => 'nullable|string',
             'ig_user_id' => 'nullable|string',
             'access_token' => 'nullable|string',
+            'campaign_id' => 'nullable|integer',
         ];
     }
 }

@@ -22,6 +22,7 @@ class PublishFacebookRequest extends FormRequest
             'video' => 'nullable|file|mimetypes:video/mp4,video/quicktime|max:512000', // 500MB max
             'page_id' => 'nullable|string',
             'access_token' => 'nullable|string',
+            'campaign_id' => 'nullable|integer',
         ];
     }
 }

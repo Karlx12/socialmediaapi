@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "add22a0a61dca4ddf870594a24b4f111",
+    "content-hash": "9219ed00cdf5f76f6589d60f1774c4e5",
     "packages": [
         {
             "name": "brick/math",
@@ -1051,6 +1051,89 @@
                 }
             ],
             "time": "2025-08-22T14:27:06+00:00"
+        },
+        {
+            "name": "incadev-uns/core-domain",
+            "version": "dev-main",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/incadev-uns/core-domain.git",
+                "reference": "c33ddec5054c2f799c8192d869539397533a335e"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/incadev-uns/core-domain/zipball/c33ddec5054c2f799c8192d869539397533a335e",
+                "reference": "c33ddec5054c2f799c8192d869539397533a335e",
+                "shasum": ""
+            },
+            "require": {
+                "illuminate/contracts": "^11.0||^12.0",
+                "laravel/sanctum": "^4.2",
+                "php": "^8.2",
+                "spatie/laravel-package-tools": "^1.16",
+                "spatie/laravel-permission": "^6.22"
+            },
+            "require-dev": {
+                "barryvdh/laravel-ide-helper": "^3.6",
+                "larastan/larastan": "^3.8",
+                "laravel/pint": "^1.14",
+                "nunomaduro/collision": "^8.8",
+                "orchestra/testbench": "^10.0.0||^9.0.0",
+                "pestphp/pest": "^3.0",
+                "pestphp/pest-plugin-arch": "^3.0",
+                "pestphp/pest-plugin-laravel": "^3.0",
+                "phpstan/extension-installer": "^1.4",
+                "phpstan/phpstan-deprecation-rules": "^2.0",
+                "phpstan/phpstan-phpunit": "^2.0",
+                "spatie/laravel-ray": "^1.35"
+            },
+            "default-branch": true,
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "aliases": {
+                        "CoreDomain": "IncadevUns\\CoreDomain\\Facades\\CoreDomain"
+                    },
+                    "providers": [
+                        "IncadevUns\\CoreDomain\\CoreDomainServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "IncadevUns\\CoreDomain\\": "src/",
+                    "IncadevUns\\CoreDomain\\Database\\Factories\\": "database/factories/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Jose Vasquez Ramos",
+                    "email": "jmvr16092003@gmail.com",
+                    "role": "Developer"
+                }
+            ],
+            "description": "Core package implementing Incadev's business domain",
+            "homepage": "https://github.com/incadev-uns/core-domain",
+            "keywords": [
+                "core-domain",
+                "incadev-uns",
+                "laravel"
+            ],
+            "support": {
+                "issues": "https://github.com/incadev-uns/core-domain/issues",
+                "source": "https://github.com/incadev-uns/core-domain/tree/main"
+            },
+            "funding": [
+                {
+                    "url": "https://github.com/incadev-uns",
+                    "type": "github"
+                }
+            ],
+            "time": "2025-11-24T01:23:48+00:00"
         },
         {
             "name": "incadev/core",
@@ -9606,7 +9689,9 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {},
+    "stability-flags": {
+        "incadev-uns/core-domain": 20
+    },
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
