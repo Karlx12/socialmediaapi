@@ -37,22 +37,32 @@ class MetaGraphService
         }
 
         $url = "{$this->graphUrl}/{$this->apiVersion}/{$pageId}/feed";
-        $resp = Http::asForm()->post($url, $payload);
-
-        return $resp->json();
+        try {
+            $resp = Http::asForm()->timeout(15)->post($url, $payload);
+            $data = $resp->json();
+            if ($resp->successful()) return $data;
+            return ['error' => 'http_error', 'status' => $resp->status(), 'details' => $data];
+        } catch (\Throwable $e) {
+            // Ensure we return a structured error instead of letting exceptions bubble up
+            return ['error' => 'exception', 'message' => $e->getMessage()];
+        }
     }
 
     public function uploadPhotoToFacebook(string $pageId, string $imageUrl, string $accessToken): string
     {
         // Upload photo to page to get media id
-        $resp = Http::post("{$this->graphUrl}/{$this->apiVersion}/{$pageId}/photos", [
+        try {
+            $resp = Http::timeout(15)->post("{$this->graphUrl}/{$this->apiVersion}/{$pageId}/photos", [
             'url' => $imageUrl,
             'published' => false,
             'access_token' => $accessToken,
         ]);
-        $data = $resp->json();
-
-        return $data['id'] ?? '';
+            $data = $resp->json();
+            if (!empty($data['id'])) return $data['id'];
+            return '';
+        } catch (\Throwable $e) {
+            return '';
+        }
     }
 
     /**
@@ -74,9 +84,14 @@ class MetaGraphService
         ];
 
         $url = "{$this->graphUrl}/{$this->apiVersion}/{$pageId}/photos";
-        $resp = Http::asForm()->post($url, $payload);
-
-        return $resp->json();
+        try {
+            $resp = Http::asForm()->timeout(30)->post($url, $payload);
+            $data = $resp->json();
+            if ($resp->successful()) return $data;
+            return ['error' => 'http_error', 'status' => $resp->status(), 'details' => $data];
+        } catch (\Throwable $e) {
+            return ['error' => 'exception', 'message' => $e->getMessage()];
+        }
     }
 
     /**
@@ -120,17 +135,22 @@ class MetaGraphService
         }
 
         $url = "{$this->graphUrl}/{$this->apiVersion}/{$pageId}/videos";
-
-        // Use multipart attaching the video file as 'source'
-        $resp = Http::attach('source', file_get_contents($localFilePath), basename($localFilePath))
-            ->asMultipart()
-            ->post($url, [
-                'description' => $description,
-                'access_token' => $accessToken,
-                'published' => $published ? 'true' : 'false',
-            ]);
-
-        return $resp->json();
+        try {
+            // Use multipart attaching the video file as 'source'
+            $resp = Http::timeout(60)
+                ->attach('source', file_get_contents($localFilePath), basename($localFilePath))
+                ->asMultipart()
+                ->post($url, [
+                    'description' => $description,
+                    'access_token' => $accessToken,
+                    'published' => $published ? 'true' : 'false',
+                ]);
+            $data = $resp->json();
+            if ($resp->successful()) return $data;
+            return ['error' => 'http_error', 'status' => $resp->status(), 'details' => $data];
+        } catch (\Throwable $e) {
+            return ['error' => 'exception', 'message' => $e->getMessage()];
+        }
     }
 
     public function publishInstagramImage(
@@ -182,8 +202,12 @@ class MetaGraphService
             $payload['children'] = json_encode($children);
         }
 
-        $createResp = Http::post("{$this->graphUrl}/{$this->apiVersion}/{$igUserId}/media", $payload);
-        $createData = $createResp->json();
+        try {
+            $createResp = Http::timeout(30)->post("{$this->graphUrl}/{$this->apiVersion}/{$igUserId}/media", $payload);
+            $createData = $createResp->json();
+        } catch (\Throwable $e) {
+            return ['error' => 'exception', 'message' => $e->getMessage()];
+        }
         if (empty($createData['id'])) {
             return ['error' => 'media_creation_failed', 'details' => $createData];
         }
@@ -192,9 +216,14 @@ class MetaGraphService
             'creation_id' => $createData['id'],
             'access_token' => $accessToken,
         ];
-        $publishResp = Http::post("{$this->graphUrl}/{$this->apiVersion}/{$igUserId}/media_publish", $publishPayload);
-
-        return $publishResp->json();
+        try {
+            $publishResp = Http::timeout(30)->post("{$this->graphUrl}/{$this->apiVersion}/{$igUserId}/media_publish", $publishPayload);
+            $data = $publishResp->json();
+            if ($publishResp->successful()) return $data;
+            return ['error' => 'http_error', 'status' => $publishResp->status(), 'details' => $data];
+        } catch (\Throwable $e) {
+            return ['error' => 'exception', 'message' => $e->getMessage()];
+        }
     }
 
     /**
@@ -239,9 +268,14 @@ class MetaGraphService
             }
         }
 
-        $resp = Http::withToken($accessToken)->post($url, $payload);
-
-        return $resp->json();
+        try {
+            $resp = Http::withToken($accessToken)->timeout(20)->post($url, $payload);
+            $data = $resp->json();
+            if ($resp->successful()) return $data;
+            return ['error' => 'http_error', 'status' => $resp->status(), 'details' => $data];
+        } catch (\Throwable $e) {
+            return ['error' => 'exception', 'message' => $e->getMessage()];
+        }
     }
 
     public function sendMessengerMessage(string $pageAccessToken, string $recipientId, string $message): array
@@ -269,8 +303,13 @@ class MetaGraphService
             'message' => ['text' => $message],
             'access_token' => $accessToken,
         ];
-        $resp = Http::post($url, $payload);
-
-        return $resp->json();
+        try {
+            $resp = Http::post($url, $payload);
+            $data = $resp->json();
+            if ($resp->successful()) return $data;
+            return ['error' => 'http_error', 'status' => $resp->status(), 'details' => $data];
+        } catch (\Throwable $e) {
+            return ['error' => 'exception', 'message' => $e->getMessage()];
+        }
     }
 }

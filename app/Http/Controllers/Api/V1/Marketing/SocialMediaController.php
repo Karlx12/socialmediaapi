@@ -53,16 +53,31 @@ class SocialMediaController extends Controller
             );
         }
 
-        // Check if the API call was successful
+        // Check if the API call returned a structured error and handle it gracefully
         if (isset($resp['error'])) {
-            return response()->json(['error' => 'Meta API error', 'details' => $resp], 400);
+            logger()->error('MetaGraphService error calling Facebook', ['resp' => $resp, 'campaign_id' => $payload['campaign_id'] ?? null, 'user_id' => auth()->id()]);
+            $isHttp = ($resp['error'] === 'http_error' || $resp['error'] === 'exception');
+            $status = $isHttp ? 502 : 400;
+            return response()->json(['error' => 'Meta API error', 'details' => $resp], $status);
         }
 
         if (!isset($resp['id'])) {
-            return response()->json(['error' => 'Invalid response from Meta API', 'response' => $resp], 400);
+            logger()->warning('MetaGraphService returned unexpected response body (no id)', ['resp' => $resp, 'campaign_id' => $payload['campaign_id'] ?? null]);
+            return response()->json(['error' => 'Invalid response from Meta API', 'response' => $resp], 502);
         }
 
-        // Guardar el post en la base de datos
+        // Check if the API call returned a structured error and handle it gracefully
+        if (isset($resp['error'])) {
+            logger()->error('MetaGraphService error calling Instagram', ['resp' => $resp, 'campaign_id' => $payload['campaign_id'] ?? null, 'user_id' => auth()->id()]);
+            $isHttp = ($resp['error'] === 'http_error' || $resp['error'] === 'exception');
+            $status = $isHttp ? 502 : 400;
+            return response()->json(['error' => 'Meta API error', 'details' => $resp], $status);
+        }
+
+        if (!isset($resp['id'])) {
+            logger()->warning('MetaGraphService returned unexpected response body (no id)', ['resp' => $resp, 'campaign_id' => $payload['campaign_id'] ?? null]);
+            return response()->json(['error' => 'Invalid response from Meta API', 'response' => $resp], 502);
+        }
         $contentType = 'text';
         if ($request->hasFile('image')) {
             $contentType = 'image';
@@ -82,7 +97,8 @@ class SocialMediaController extends Controller
                 'link_url' => $payload['link'] ?? null,
                 'status' => 'published',
                 'published_at' => now(),
-                'created_by' => auth()->id(),
+                // created_by can be null when the call was unauthenticated (local dev)
+                'created_by' => auth()->id() ?? null,
             ]);
         } catch (\Illuminate\Database\QueryException $e) {
             if ($e->getCode() == 23000 && str_contains($e->getMessage(), 'posts_campaign_id_foreign')) {
@@ -139,7 +155,7 @@ class SocialMediaController extends Controller
                 'image_path' => $imagePath,
                 'status' => 'published',
                 'published_at' => now(),
-                'created_by' => auth()->id(),
+                'created_by' => auth()->id() ?? null,
             ]);
         } catch (\Illuminate\Database\QueryException $e) {
             if ($e->getCode() == 23000 && str_contains($e->getMessage(), 'posts_campaign_id_foreign')) {
