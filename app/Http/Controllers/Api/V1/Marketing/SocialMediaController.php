@@ -53,28 +53,16 @@ class SocialMediaController extends Controller
             );
         }
 
-        // Check if the API call returned a structured error and handle it gracefully
+        // If the API call returned a structured error, log and return meaningful status
         if (isset($resp['error'])) {
             logger()->error('MetaGraphService error calling Facebook', ['resp' => $resp, 'campaign_id' => $payload['campaign_id'] ?? null, 'user_id' => auth()->id()]);
-            $isHttp = ($resp['error'] === 'http_error' || $resp['error'] === 'exception');
-            $status = $isHttp ? 502 : 400;
+            $isHttp = in_array($resp['error'], ['http_error', 'exception'], true);
+            $status = $isHttp ? 502 : 400; // 502 for upstream HTTP or exception errors, 400 for other meta errors
             return response()->json(['error' => 'Meta API error', 'details' => $resp], $status);
         }
 
-        if (!isset($resp['id'])) {
-            logger()->warning('MetaGraphService returned unexpected response body (no id)', ['resp' => $resp, 'campaign_id' => $payload['campaign_id'] ?? null]);
-            return response()->json(['error' => 'Invalid response from Meta API', 'response' => $resp], 502);
-        }
-
-        // Check if the API call returned a structured error and handle it gracefully
-        if (isset($resp['error'])) {
-            logger()->error('MetaGraphService error calling Instagram', ['resp' => $resp, 'campaign_id' => $payload['campaign_id'] ?? null, 'user_id' => auth()->id()]);
-            $isHttp = ($resp['error'] === 'http_error' || $resp['error'] === 'exception');
-            $status = $isHttp ? 502 : 400;
-            return response()->json(['error' => 'Meta API error', 'details' => $resp], $status);
-        }
-
-        if (!isset($resp['id'])) {
+        // Graph API should return an id for published objects — otherwise it's an unexpected response
+        if (! isset($resp['id'])) {
             logger()->warning('MetaGraphService returned unexpected response body (no id)', ['resp' => $resp, 'campaign_id' => $payload['campaign_id'] ?? null]);
             return response()->json(['error' => 'Invalid response from Meta API', 'response' => $resp], 502);
         }
@@ -101,8 +89,9 @@ class SocialMediaController extends Controller
                 'created_by' => auth()->id() ?? null,
             ]);
         } catch (\Illuminate\Database\QueryException $e) {
-            if ($e->getCode() == 23000 && str_contains($e->getMessage(), 'posts_campaign_id_foreign')) {
-                return response()->json(['error' => 'Campaign not found', 'code' => 'CAMPAIGN_NOT_FOUND'], 400);
+                if ($e->getCode() == 23000 && str_contains($e->getMessage(), 'posts_campaign_id_foreign')) {
+                // A campaign id foreign key violation means the requested campaign doesn't exist.
+                return response()->json(['error' => 'Campaign not found', 'code' => 'CAMPAIGN_NOT_FOUND'], 404);
             }
             throw $e;
         }
@@ -144,6 +133,19 @@ class SocialMediaController extends Controller
             $imagePath = $path;
         }
 
+        // Guard against errors coming back from the MetaGraphService
+        if (isset($resp['error'])) {
+            logger()->error('MetaGraphService error calling Instagram', ['resp' => $resp, 'campaign_id' => $payload['campaign_id'] ?? null, 'user_id' => auth()->id()]);
+            $isHttp = in_array($resp['error'], ['http_error', 'exception'], true);
+            $status = $isHttp ? 502 : 400;
+            return response()->json(['error' => 'Meta API error', 'details' => $resp], $status);
+        }
+
+        if (! isset($resp['id'])) {
+            logger()->warning('MetaGraphService returned unexpected response body (no id)', ['resp' => $resp, 'campaign_id' => $payload['campaign_id'] ?? null]);
+            return response()->json(['error' => 'Invalid response from Meta API', 'response' => $resp], 502);
+        }
+
         try {
             $post = Post::create([
                 'campaign_id' => $payload['campaign_id'] ?? null,
@@ -159,7 +161,7 @@ class SocialMediaController extends Controller
             ]);
         } catch (\Illuminate\Database\QueryException $e) {
             if ($e->getCode() == 23000 && str_contains($e->getMessage(), 'posts_campaign_id_foreign')) {
-                return response()->json(['error' => 'Campaign not found', 'code' => 'CAMPAIGN_NOT_FOUND'], 400);
+                return response()->json(['error' => 'Campaign not found', 'code' => 'CAMPAIGN_NOT_FOUND'], 404);
             }
             throw $e;
         }

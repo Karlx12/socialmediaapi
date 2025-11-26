@@ -34,6 +34,13 @@ class SocialChatController extends Controller
             $resp = $this->metaService->sendInstagramMessage($igUserId, $to, $message, $payload['access_token'] ?? null);
         }
 
+        // Normalize error responses so clients receive proper HTTP statuses
+        if (is_array($resp) && isset($resp['error'])) {
+            $isHttp = in_array($resp['error'], ['http_error', 'exception'], true);
+            $status = $isHttp ? 502 : 400;
+            return response()->json(['error' => $resp['error'], 'details' => $resp], $status);
+        }
+
         return response()->json($resp);
     }
 }
