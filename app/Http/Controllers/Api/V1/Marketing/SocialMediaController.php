@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Marketing\PublishFacebookRequest;
 use App\Http\Requests\Api\V1\Marketing\PublishInstagramRequest;
 use App\Services\SocialMedia\MetaGraphService;
+use Illuminate\Support\Facades\Http as HttpFacade;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\JsonResponse;
 use IncadevUns\CoreDomain\Models\Post;
@@ -16,6 +17,12 @@ class SocialMediaController extends Controller
 
     public function publishToFacebook(PublishFacebookRequest $request): JsonResponse
     {
+        // Preflight check: ensure we have a configured page access token to avoid ambiguous upstream errors
+        if (!config('services.meta.page_access_token') && !env('META_PAGE_ACCESS_TOKEN')) {
+            logger()->warning('Attempt to publish to Facebook but META_PAGE_ACCESS_TOKEN is not configured');
+            return response()->json(['error' => 'Social Media API misconfigured: META_PAGE_ACCESS_TOKEN is missing or invalid'], 502);
+        }
+
         $payload = $request->validated();
         $post = null;
         // If the request references an existing Post model, load it and use its values
@@ -66,9 +73,13 @@ class SocialMediaController extends Controller
             );
         }
 
-        // If the API call returned a structured error, log and return meaningful status
+        // If the API call returned a structured error, handle specific cases and return meaningful status
         if (isset($resp['error'])) {
             logger()->error('MetaGraphService error calling Facebook', ['resp' => $resp, 'campaign_id' => $payload['campaign_id'] ?? null, 'user_id' => auth()->id()]);
+            // If the Meta API indicates the page access token is missing, return 502 with clearer message to admins
+            if (($resp['error'] ?? '') === 'page_access_token_missing' || (isset($resp['details']['error']) && $resp['details']['error'] === 'page_access_token_missing')) {
+                return response()->json(['error' => 'Social Media API misconfigured: META_PAGE_ACCESS_TOKEN is missing or invalid', 'details' => $resp], 502);
+            }
             $isHttp = in_array($resp['error'], ['http_error', 'exception'], true);
             $status = $isHttp ? 502 : 400; // 502 for upstream HTTP or exception errors, 400 for other meta errors
             return response()->json(['error' => 'Meta API error', 'details' => $resp], $status);
@@ -146,6 +157,12 @@ class SocialMediaController extends Controller
 
     public function publishToInstagram(PublishInstagramRequest $request): JsonResponse
     {
+        // Preflight check: ensure we have IG user id and access token configured
+        if (!config('services.meta.ig_access_token') && !env('META_IG_ACCESS_TOKEN') && !config('services.meta.page_access_token') && !env('META_PAGE_ACCESS_TOKEN')) {
+            logger()->warning('Attempt to publish to Instagram but IG access token or page access token is not configured');
+            return response()->json(['error' => 'Social Media API misconfigured: META_IG_ACCESS_TOKEN or META_PAGE_ACCESS_TOKEN is missing or invalid'], 502);
+        }
+
         $payload = $request->validated();
         $post = null;
         if (! empty($payload['post_id'])) {
@@ -165,20 +182,67 @@ class SocialMediaController extends Controller
             $file = $request->file('image');
             $path = $file->storePublicly('uploads', 'public');
             $imageUrl = Storage::disk('public')->url($path);
-            $resp = $this->metaService->publishInstagramImage(
-                $igUserId,
-                $imageUrl,
-                $payload['caption'] ?? '',
-                $payload['access_token'] ?? null
-            );
+            // If uploaded file is not JPEG, try to convert it to JPEG to be compatible with IG
+            $fileMime = $file->getMimeType() ?? $file->getClientMimeType();
+            if (! $fileMime || stripos($fileMime, 'jpeg') === false) {
+                // Attempt conversion
+                try {
+                    $fullPath = storage_path('app/public/' . $path);
+                    if (function_exists('imagecreatefromstring')) {
+                        $bytes = file_get_contents($fullPath);
+                        $im = @imagecreatefromstring($bytes);
+                        if ($im !== false) {
+                            ob_start();
+                            imagejpeg($im, null, 85);
+                            imagedestroy($im);
+                            $jpeg = ob_get_clean();
+                            if ($jpeg !== false && strlen($jpeg) > 0) {
+                                // Replace stored file content with JPEG
+                                Storage::disk('public')->put($path, $jpeg);
+                                $imageUrl = Storage::disk('public')->url($path);
+                            } else {
+                                return response()->json(['error' => 'Failed to convert uploaded image to JPEG'], 400);
+                            }
+                        } else {
+                            return response()->json(['error' => 'Uploaded file is not a valid image'], 400);
+                        }
+                    } else {
+                        return response()->json(['error' => 'Server does not support image conversion (missing GD)'], 500);
+                    }
+                } catch (\Throwable $e) {
+                    return response()->json(['error' => 'Failed to process uploaded image', 'details' => $e->getMessage()], 500);
+                }
+            }
         } else {
-            $resp = $this->metaService->publishInstagramImage(
-                $igUserId,
-                $payload['image_url'],
-                $payload['caption'] ?? '',
-                $payload['access_token'] ?? null
-            );
+            $imageUrl = $payload['image_url'] ?? null;
         }
+
+        // Validate image URL: not localhost, reachable, and must be JPEG
+        if (empty($imageUrl)) {
+            return response()->json(['error' => 'Instagram posts require an image_url or an uploaded image file.'], 400);
+        }
+        if (str_contains($imageUrl, 'localhost') || str_contains($imageUrl, '127.0.0.1')) {
+            return response()->json(['error' => 'Instagram API requires the image URL to be publicly accessible. The provided URL points to localhost; use ngrok or a public image URL.'], 400);
+        }
+        try {
+            $headResp = HttpFacade::timeout(5)->head($imageUrl);
+            if (! $headResp->ok()) {
+                return response()->json(['error' => 'Provided image URL is not reachable by the server running the API. Ensure the URL is publicly accessible.'], 400);
+            }
+            $contentType = $headResp->header('Content-Type') ?? $headResp->header('content-type');
+            if (! $contentType || stripos($contentType, 'jpeg') === false) {
+                return response()->json(['error' => 'Instagram API requires JPEG images. Provide a publicly accessible JPEG image URL or upload a JPEG file.'], 400);
+            }
+        } catch (\Throwable $e) {
+            return response()->json(['error' => 'Unable to reach image URL to validate it; ensure the URL is public and accessible.'], 400);
+        }
+
+        $resp = $this->metaService->publishInstagramImage(
+            $igUserId,
+            $imageUrl,
+            $payload['caption'] ?? '',
+            $payload['access_token'] ?? null
+        );
 
         // Guardar el post en la base de datos
         $contentType = 'image'; // Instagram posts are typically images or videos, but this method handles images
@@ -190,6 +254,9 @@ class SocialMediaController extends Controller
         // Guard against errors coming back from the MetaGraphService
         if (isset($resp['error'])) {
             logger()->error('MetaGraphService error calling Instagram', ['resp' => $resp, 'campaign_id' => $payload['campaign_id'] ?? null, 'user_id' => auth()->id()]);
+            if (($resp['error'] ?? '') === 'ig_access_token_missing' || (isset($resp['details']['error']) && $resp['details']['error'] === 'ig_access_token_missing')) {
+                return response()->json(['error' => 'Social Media API misconfigured: META_IG_ACCESS_TOKEN is missing or invalid', 'details' => $resp], 502);
+            }
             $isHttp = in_array($resp['error'], ['http_error', 'exception'], true);
             $status = $isHttp ? 502 : 400;
             return response()->json(['error' => 'Meta API error', 'details' => $resp], $status);
