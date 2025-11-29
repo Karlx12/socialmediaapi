@@ -14,7 +14,8 @@ class PublishInstagramRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'image_url' => 'required_without:image|url',
+            'post_id' => 'nullable|integer|exists:posts,id',
+            'image_url' => 'required_without_all:post_id,image|url',
             'image' => 'nullable|file|image|max:10240', // 10MB
             'caption' => 'nullable|string',
             'ig_user_id' => 'nullable|string',

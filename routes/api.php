@@ -5,16 +5,14 @@ use App\Http\Controllers\Api\V1\Marketing\SocialMediaController;
 use App\Http\Controllers\Api\V1\Marketing\WebhookController;
 use Illuminate\Support\Facades\Route;
 
-// Webhook endpoints from Meta should be public (they verify via verify token / signature)
-// Note: this file already gets the `api` prefix automatically so avoid repeating it
+// Webhook endpoints and authenticated socialmedia endpoints under /api/socialmedia
 Route::prefix('socialmedia')->group(function () {
+    // Webhooks (public)
     Route::get('webhook', [WebhookController::class, 'verify']);
     Route::post('webhook', [WebhookController::class, 'receive']);
-});
 
-Route::prefix('socialmedia')->middleware('auth:sanctum')->group(function () {
+    // Public API (no authentication required)
     Route::post('posts/facebook', [SocialMediaController::class, 'publishToFacebook']);
     Route::post('posts/instagram', [SocialMediaController::class, 'publishToInstagram']);
-
     Route::post('chats/send', [SocialChatController::class, 'sendMessage']);
 });

@@ -17,6 +17,19 @@ class SocialMediaController extends Controller
     public function publishToFacebook(PublishFacebookRequest $request): JsonResponse
     {
         $payload = $request->validated();
+        $post = null;
+        // If the request references an existing Post model, load it and use its values
+        if (! empty($payload['post_id'])) {
+            $post = Post::find($payload['post_id']);
+            if (! $post) {
+                return response()->json(['error' => 'Post not found', 'code' => 'POST_NOT_FOUND'], 404);
+            }
+            // Build payload from Post model if values are not present
+            $payload['message'] = $payload['message'] ?? $post->content ?? null;
+            $payload['image_url'] = $payload['image_url'] ?? ($post->image_path ? Storage::disk('public')->url($post->image_path) : null);
+            $payload['link'] = $payload['link'] ?? $post->link_url ?? null;
+            $payload['campaign_id'] = $payload['campaign_id'] ?? $post->campaign_id ?? null;
+        }
         $pageId = $payload['page_id'] ?? config('services.meta.page_id') ?: env('META_PAGE_ID');
         // If an image or video file was uploaded, store it and use its public URL
         if ($request->hasFile('image')) {
@@ -74,7 +87,14 @@ class SocialMediaController extends Controller
         }
 
         try {
-            $post = Post::create([
+            if ($post) {
+                // Update existing Post with publish attributes
+                $post->meta_post_id = $resp['id'];
+                $post->status = 'published';
+                $post->published_at = now();
+                $post->save();
+            } else {
+                $post = Post::create([
                 'campaign_id' => $payload['campaign_id'] ?? null,
                 'meta_post_id' => $resp['id'],
                 'title' => substr($payload['message'] ?? 'Facebook Post', 0, 255),
@@ -88,10 +108,31 @@ class SocialMediaController extends Controller
                 // created_by can be null when the call was unauthenticated (local dev)
                 'created_by' => auth()->id() ?? null,
             ]);
+            }
         } catch (\Illuminate\Database\QueryException $e) {
-                if ($e->getCode() == 23000 && str_contains($e->getMessage(), 'posts_campaign_id_foreign')) {
-                // A campaign id foreign key violation means the requested campaign doesn't exist.
+            // MySQL / SQLite return 23000 for unique/key violations and foreign key errors
+            // Handle foreign key violation for campaigns
+            if ($e->getCode() == 23000 && str_contains($e->getMessage(), 'posts_campaign_id_foreign')) {
                 return response()->json(['error' => 'Campaign not found', 'code' => 'CAMPAIGN_NOT_FOUND'], 404);
+            }
+            // Handle duplicate meta_post_id unique violation
+            if ($e->getCode() == 23000 && (str_contains($e->getMessage(), 'posts_meta_post_id_unique') || str_contains($e->getMessage(), 'UNIQUE') || str_contains($e->getMessage(), 'duplicate'))) {
+                // If duplicate meta_post_id detected in DB, update the existing record and remove the draft (if any)
+                $existing = Post::where('meta_post_id', $resp['id'])->first();
+                if ($existing) {
+                    $existing->status = 'published';
+                    $existing->published_at = now();
+                    $existing->save();
+                    if ($post && $post->id !== $existing->id) {
+                        try {
+                            $post->delete();
+                        } catch (\Throwable $t) {
+                            // ignore
+                        }
+                    }
+                    return response()->json(['meta_post_id' => $resp['id'], 'post_id' => $existing->id, 'data' => $resp]);
+                }
+                return response()->json(['error' => 'Duplicate meta_post_id', 'code' => 'DUPLICATE_META_POST'], 409);
             }
             throw $e;
         }
@@ -106,6 +147,19 @@ class SocialMediaController extends Controller
     public function publishToInstagram(PublishInstagramRequest $request): JsonResponse
     {
         $payload = $request->validated();
+        $post = null;
+        if (! empty($payload['post_id'])) {
+            $post = Post::find($payload['post_id']);
+            if (! $post) {
+                return response()->json(['error' => 'Post not found', 'code' => 'POST_NOT_FOUND'], 404);
+            }
+            if (! empty($post->meta_post_id)) {
+                return response()->json(['error' => 'Post already published', 'code' => 'META_ALREADY_POSTED'], 409);
+            }
+            $payload['caption'] = $payload['caption'] ?? $post->content ?? null;
+            $payload['image_url'] = $payload['image_url'] ?? ($post->image_path ? Storage::disk('public')->url($post->image_path) : null);
+            $payload['campaign_id'] = $payload['campaign_id'] ?? $post->campaign_id ?? null;
+        }
         $igUserId = $payload['ig_user_id'] ?? config('services.meta.ig_user_id') ?: env('META_IG_USER_ID');
         if ($request->hasFile('image')) {
             $file = $request->file('image');
@@ -147,7 +201,13 @@ class SocialMediaController extends Controller
         }
 
         try {
-            $post = Post::create([
+            if ($post) {
+                $post->meta_post_id = $resp['id'];
+                $post->status = 'published';
+                $post->published_at = now();
+                $post->save();
+            } else {
+                $post = Post::create([
                 'campaign_id' => $payload['campaign_id'] ?? null,
                 'meta_post_id' => $resp['id'],
                 'title' => substr($payload['caption'] ?? 'Instagram Post', 0, 255),
@@ -159,6 +219,7 @@ class SocialMediaController extends Controller
                 'published_at' => now(),
                 'created_by' => auth()->id() ?? null,
             ]);
+            }
         } catch (\Illuminate\Database\QueryException $e) {
             if ($e->getCode() == 23000 && str_contains($e->getMessage(), 'posts_campaign_id_foreign')) {
                 return response()->json(['error' => 'Campaign not found', 'code' => 'CAMPAIGN_NOT_FOUND'], 404);

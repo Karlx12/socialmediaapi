@@ -10,7 +10,7 @@ class WebhookTest extends TestCase
     {
         config(['services.meta.webhook_verify_token' => 'MY_VERIFY_TOKEN']);
 
-        $resp = $this->get('/api/v1/marketing/socialmedia/webhook?hub[mode]=subscribe&hub[verify_token]=MY_VERIFY_TOKEN&hub[challenge]=CHAL');
+        $resp = $this->get('/api/socialmedia/webhook?hub[mode]=subscribe&hub[verify_token]=MY_VERIFY_TOKEN&hub[challenge]=CHAL');
 
         $resp->assertStatus(200);
         $this->assertEquals('CHAL', json_decode($resp->getContent(), true));
@@ -20,7 +20,7 @@ class WebhookTest extends TestCase
     {
         config(['services.meta.webhook_verify_token' => 'MY_VERIFY_TOKEN']);
 
-        $resp = $this->get('/api/v1/marketing/socialmedia/webhook?hub[mode]=subscribe&hub[verify_token]=WRONG&hub[challenge]=CHAL');
+        $resp = $this->get('/api/socialmedia/webhook?hub[mode]=subscribe&hub[verify_token]=WRONG&hub[challenge]=CHAL');
 
         $resp->assertStatus(403);
     }
@@ -33,12 +33,12 @@ class WebhookTest extends TestCase
         $raw = json_encode($payload);
 
         // invalid signature should be rejected
-        $resp = $this->withHeaders(['x-hub-signature' => 'sha1=invalid'])->postJson('/api/v1/marketing/socialmedia/webhook', $payload);
+        $resp = $this->withHeaders(['x-hub-signature' => 'sha1=invalid'])->postJson('/api/socialmedia/webhook', $payload);
         $resp->assertStatus(403);
 
         // proper signature should be accepted
         $signature = 'sha1='.hash_hmac('sha1', $raw, config('services.meta.app_secret'));
-        $resp = $this->withHeaders(['x-hub-signature' => $signature])->postJson('/api/v1/marketing/socialmedia/webhook', $payload);
+        $resp = $this->withHeaders(['x-hub-signature' => $signature])->postJson('/api/socialmedia/webhook', $payload);
         $resp->assertStatus(200);
     }
 }

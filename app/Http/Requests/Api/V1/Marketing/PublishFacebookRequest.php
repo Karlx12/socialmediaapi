@@ -14,7 +14,9 @@ class PublishFacebookRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'message' => 'required_without:image_url|nullable|string',
+            'post_id' => 'nullable|integer|exists:posts,id',
+            // If post_id is present, we can skip message/image_url validation
+            'message' => 'required_without_all:post_id,image_url|nullable|string',
             'link' => 'nullable|url',
             'image_url' => 'nullable|url',
             // Accept uploaded image or video files from frontend microservice

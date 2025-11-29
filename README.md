@@ -2,7 +2,7 @@
 
 This microservice provides endpoints to publish posts to Meta platforms (Facebook and Instagram) using the Meta Graph API. It integrates with the core-domain package for data persistence.
 
-Base route prefix: `/api/v1/marketing/socialmedia`
+Base route prefix: `/api/socialmedia`
 
 All endpoints require authentication via Bearer token (`Authorization: Bearer <token>`).
 
@@ -20,7 +20,7 @@ export TOKEN=$(grep -E '^SANCTUM_TOKEN=' .env | cut -d'=' -f2-)
 
 Este microservicio expone endpoints para publicar contenido en plataformas Meta (Facebook e Instagram) usando la Graph API.
 
-Base route prefix: `/api/v1/marketing/socialmedia`
+Base route prefix: `/api/socialmedia`
 
 IMPORTANTE: Todas las llamadas a los endpoints protegidos requieren autenticación con un token Sanctum en el header `Authorization: Bearer <token>`.
 
@@ -70,7 +70,7 @@ Nota: si el usuario no existe, la llamada Tinker devolverá `null` y deberás cr
 
 Publicar en Facebook
 - Método: `POST`
-- URL: `/api/v1/marketing/socialmedia/posts/facebook`
+- URL: `/api/socialmedia/posts/facebook`
 - Parámetros (form-data o x-www-form-urlencoded):
   - `message` (string, opcional)
   - `link` (url, opcional)
@@ -81,7 +81,7 @@ Publicar en Facebook
 
 Ejemplo — publicar texto (x-www-form-urlencoded):
 ```bash
-curl -X POST "http://localhost:8000/api/v1/marketing/socialmedia/posts/facebook" \
+curl -X POST "http://localhost:8000/api/socialmedia/posts/facebook" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "message=Hola Mundo desde la API&campaign_id=1"
@@ -89,7 +89,7 @@ curl -X POST "http://localhost:8000/api/v1/marketing/socialmedia/posts/facebook"
 
 Ejemplo — subir archivo local (multipart) (recomendado si la URL pública falla):
 ```bash
-curl -X POST "http://localhost:8000/api/v1/marketing/socialmedia/posts/facebook" \
+curl -X POST "http://localhost:8000/api/socialmedia/posts/facebook" \
   -H "Authorization: Bearer $TOKEN" \
   -F "image=@/ruta/a/tu/image.png" \
   -F "message=Subida de imagen para prueba"
@@ -97,7 +97,7 @@ curl -X POST "http://localhost:8000/api/v1/marketing/socialmedia/posts/facebook"
 
 Publicar en Instagram
 - Método: `POST`
-- URL: `/api/v1/marketing/socialmedia/posts/instagram`
+- URL: `/api/socialmedia/posts/instagram`
 - Parámetros (form-data o x-www-form-urlencoded):
   - `image_url` (string, requerido si no se sube `image`)
   - `image` (file, opcional; upload alternativo)
@@ -105,7 +105,7 @@ Publicar en Instagram
 
 Ejemplo — publicar usando `image_url` directo (puede fallar si la URL no es aceptada por Meta):
 ```bash
-curl -X POST "http://localhost:8000/api/v1/marketing/socialmedia/posts/instagram" \
+curl -X POST "http://localhost:8000/api/socialmedia/posts/instagram" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "image_url=https://example.com/image.jpg&caption=Mi foto&campaign_id=1"
@@ -141,7 +141,7 @@ HTTP: 200 OK
 - INCORRECTO #1 — URL pública con redirecciones o ubicación que Meta no puede descargar:
 ```bash
 # INCORRECTO — puede devolver media_creation_failed
-curl -X POST "http://localhost:8000/api/v1/marketing/socialmedia/posts/instagram" \
+curl -X POST "http://localhost:8000/api/socialmedia/posts/instagram" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "image_url=https://via.placeholder.com/1200x630.jpg&caption=Test&campaign_id=1"
@@ -150,7 +150,7 @@ curl -X POST "http://localhost:8000/api/v1/marketing/socialmedia/posts/instagram
 - INCORRECTO #2 — host que devuelve HTML/redirección al intentar recuperar la imagen (transfer.sh, algunos CDN con redirect):
 ```bash
 # INCORRECTO — puede devolver media_creation_failed o error de descarga
-curl -X POST "http://localhost:8000/api/v1/marketing/socialmedia/posts/instagram" \
+curl -X POST "http://localhost:8000/api/socialmedia/posts/instagram" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "image_url=https://0x0.st/KWlQ.png&caption=Test&campaign_id=1"
@@ -193,7 +193,7 @@ Este flujo (subir a Facebook -> usar la imagen subida para Instagram) es la form
 
 ```bash
 # INCORRECTO — puede fallar con "media_creation_failed" por no poder recuperar la URL
-curl -X POST "http://localhost:8000/api/v1/marketing/socialmedia/posts/instagram" \
+curl -X POST "http://localhost:8000/api/socialmedia/posts/instagram" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "image_url=https://via.placeholder.com/1200x630.jpg&caption=Test IG post&campaign_id=1"
@@ -203,7 +203,7 @@ curl -X POST "http://localhost:8000/api/v1/marketing/socialmedia/posts/instagram
 
 ```bash
 # INCORRECTO — el host/URL no es adecuado para descargar la imagen desde Meta
-curl -X POST "http://localhost:8000/api/v1/marketing/socialmedia/posts/instagram" \
+curl -X POST "http://localhost:8000/api/socialmedia/posts/instagram" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "image_url=https://0x0.st/KWlQ.png&caption=Test IG post&campaign_id=1"

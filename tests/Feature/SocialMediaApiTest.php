@@ -27,14 +27,15 @@ class SocialMediaApiTest extends TestCase
         $token = $user->createToken('test')->plainTextToken;
 
         $resp = $this->withHeader('Authorization', "Bearer {$token}")
-            ->postJson('/api/v1/marketing/socialmedia/posts/facebook', [
+            ->postJson('/api/socialmedia/posts/facebook', [
                 'message' => 'test N° 1',
                 'page_id' => '123',
                 'access_token' => 'fake',
             ]);
 
         $resp->assertStatus(200);
-        $resp->assertJson(['id' => '1234']);
+        $resp->assertJsonFragment(['meta_post_id' => '1234']);
+        $resp->assertJsonPath('data.id', '1234');
     }
 
     // Format validation removed: message pattern enforcement is not required by default.
@@ -51,7 +52,7 @@ class SocialMediaApiTest extends TestCase
         $token = $user->createToken('test')->plainTextToken;
 
         $resp = $this->withHeader('Authorization', "Bearer {$token}")
-            ->postJson('/api/v1/marketing/socialmedia/chats/send', [
+            ->postJson('/api/socialmedia/chats/send', [
                 'platform' => 'whatsapp',
                 'to' => '51999999999',
                 'message' => 'Hi!',
@@ -75,7 +76,7 @@ class SocialMediaApiTest extends TestCase
         $token = $user->createToken('test')->plainTextToken;
 
         $resp = $this->withHeader('Authorization', "Bearer {$token}")
-            ->postJson('/api/v1/marketing/socialmedia/chats/send', [
+            ->postJson('/api/socialmedia/chats/send', [
                 'platform' => 'whatsapp',
                 'to' => '51999999999',
                 'template' => [
@@ -106,7 +107,7 @@ class SocialMediaApiTest extends TestCase
         $file = UploadedFile::fake()->image('social.png');
 
         $resp = $this->withHeader('Authorization', "Bearer {$token}")
-            ->post('/api/v1/marketing/socialmedia/posts/facebook', [
+            ->post('/api/socialmedia/posts/facebook', [
                 'image' => $file,
                 'message' => 'Prueba con imagen',
                 'page_id' => '123',
@@ -115,5 +116,95 @@ class SocialMediaApiTest extends TestCase
 
         $resp->assertStatus(200);
         Storage::disk('public')->assertExists('uploads/' . $file->hashName());
+    }
+
+    public function test_duplicate_meta_post_id_returns_409()
+    {
+        $mock = \Mockery::mock(MetaGraphService::class);
+        $mock->shouldReceive('publishFacebookPost')
+            ->twice()
+            ->andReturn(['id' => 'DUPLICATE_TEST_123']);
+        $this->app->instance(MetaGraphService::class, $mock);
+
+        $user = \App\Models\User::factory()->create();
+        $token = $user->createToken('test')->plainTextToken;
+
+        $first = $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson('/api/socialmedia/posts/facebook', [
+                'message' => 'first post',
+                'page_id' => '123',
+                'access_token' => 'fake',
+                'campaign_id' => null,
+            ]);
+        $first->assertStatus(200);
+
+        $second = $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson('/api/socialmedia/posts/facebook', [
+                'message' => 'duplicate post',
+                'page_id' => '123',
+                'access_token' => 'fake',
+                'campaign_id' => null,
+            ]);
+
+        $second->assertStatus(409);
+        $second->assertJsonFragment(['code' => 'DUPLICATE_META_POST']);
+    }
+
+    public function test_publish_using_post_id_updates_post_and_returns_meta_post()
+    {
+        $mock = \Mockery::mock(MetaGraphService::class);
+        $mock->shouldReceive('publishFacebookPost')
+            ->once()
+            ->andReturn(['id' => 'PUBLISH_BY_ID_123']);
+        $this->app->instance(MetaGraphService::class, $mock);
+
+        $user = \App\Models\User::factory()->create();
+        $token = $user->createToken('test')->plainTextToken;
+
+        // Create a post model in DB
+        $post = \IncadevUns\CoreDomain\Models\Post::create([
+            'campaign_id' => null,
+            'title' => 'Draft Post',
+            'platform' => 'facebook',
+            'content' => 'Post content for publish-by-id',
+            'content_type' => 'text',
+            'status' => 'draft',
+        ]);
+
+        $resp = $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson('/api/socialmedia/posts/facebook', [
+                'post_id' => $post->id,
+            ]);
+
+        $resp->assertStatus(200);
+        $resp->assertJsonFragment(['meta_post_id' => 'PUBLISH_BY_ID_123']);
+
+        $post->refresh();
+        $this->assertEquals('PUBLISH_BY_ID_123', $post->meta_post_id);
+        $this->assertEquals('published', $post->status);
+    }
+
+    public function test_publish_using_post_id_when_already_posted_returns_409()
+    {
+        $user = \App\Models\User::factory()->create();
+        $token = $user->createToken('test')->plainTextToken;
+
+        $post = \IncadevUns\CoreDomain\Models\Post::create([
+            'campaign_id' => null,
+            'title' => 'Already Posted',
+            'platform' => 'facebook',
+            'content' => 'Already posted',
+            'content_type' => 'text',
+            'status' => 'published',
+            'meta_post_id' => 'ALREADY_123',
+        ]);
+
+        $resp = $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson('/api/socialmedia/posts/facebook', [
+                'post_id' => $post->id,
+            ]);
+
+        $resp->assertStatus(409);
+        $resp->assertExactJson(['error' => 'Post already published', 'code' => 'META_ALREADY_POSTED']);
     }
 }
